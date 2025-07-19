@@ -3,15 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Moagem Simulator PRO | Aspen-Style</title>
+    <title>Moagem Simulator PRO | Balanço de Massa</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/konva@8.3.2/konva.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --aspen-blue: #005b96;
             --aspen-dark: #003d66;
             --aspen-accent: #00a3e0;
             --aspen-panel: #f0f4f7;
+            --flow-blue: #0077c8;
+            --flow-green: #28a745;
+            --flow-red: #dc3545;
+            --selection-color: rgba(0, 163, 224, 0.3);
+            --context-menu-bg: white;
         }
         
         body {
@@ -20,20 +27,22 @@
             padding: 0;
             background-color: #e6e9ec;
             color: #333;
+            user-select: none;
         }
         
-        .aspen-container {
+        .app-container {
             display: grid;
             grid-template-columns: 250px 1fr;
             height: 100vh;
         }
         
-        /* Sidebar estilo Aspen */
+        /* Sidebar */
         .sidebar {
             background: linear-gradient(to bottom, var(--aspen-dark), var(--aspen-blue));
             color: white;
             padding: 15px;
             box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            z-index: 10;
         }
         
         .logo {
@@ -49,6 +58,9 @@
             border-radius: 4px;
             cursor: pointer;
             transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
         .nav-item:hover {
@@ -62,8 +74,8 @@
         
         /* Main Content */
         .main-content {
-            display: grid;
-            grid-template-rows: 50px 1fr;
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
         }
         
@@ -72,51 +84,225 @@
             border-bottom: 1px solid #ddd;
             display: flex;
             align-items: center;
-            padding: 0 20px;
+            padding: 10px 20px;
+            gap: 10px;
+            z-index: 5;
         }
         
-        .tab-container {
-            display: flex;
-            height: 100%;
-        }
-        
-        .tab {
-            padding: 0 20px;
-            display: flex;
-            align-items: center;
-            border-right: 1px solid #eee;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        
-        .tab.active {
-            background-color: var(--aspen-panel);
-            color: var(--aspen-blue);
-            font-weight: bold;
-        }
-        
-        /* Fluxograma */
-        .flowchart-container {
-            background-color: var(--aspen-panel);
+        /* Páginas */
+        .page {
+            display: none;
             padding: 20px;
-            overflow: auto;
+            overflow-y: auto;
+            height: calc(100vh - 60px);
         }
         
-        #flowchart {
-            background-color: white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            margin: 0 auto;
+        .page.active {
+            display: block;
         }
         
-        /* Painel de Controle */
-        .control-panel {
+        /* Página de Simulação */
+        .flowchart-container {
             background-color: white;
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            margin-top: 20px;
+            margin-bottom: 20px;
+            height: 500px;
+            position: relative;
         }
         
+        #flowchart {
+            background-color: white;
+            width: 100%;
+            height: 100%;
+            border: 1px dashed #ccc;
+        }
+        
+        /* Modal de Edição */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            width: 500px;
+            max-width: 90%;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        .modal-title {
+            color: var(--aspen-blue);
+            margin: 0;
+            font-size: 18px;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #666;
+        }
+        
+        /* Menu de Contexto */
+        .context-menu {
+            position: absolute;
+            background-color: var(--context-menu-bg);
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+            display: none;
+            min-width: 150px;
+        }
+        
+        .context-menu-item {
+            padding: 8px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        
+        .context-menu-item:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .context-menu-item.delete {
+            color: #dc3545;
+        }
+        
+        .context-menu-divider {
+            height: 1px;
+            background-color: #eee;
+            margin: 4px 0;
+        }
+        
+        /* Resumo da Simulação */
+        .summary-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .summary-title {
+            color: var(--aspen-blue);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid var(--aspen-accent);
+            padding-bottom: 5px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+        
+        .summary-item {
+            padding: 10px;
+            border-radius: 5px;
+            background-color: var(--aspen-panel);
+        }
+        
+        .summary-label {
+            font-size: 12px;
+            color: var(--aspen-dark);
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .summary-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--aspen-blue);
+        }
+        
+        .summary-unit {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        /* Container dos Gráficos */
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .chart-container {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            height: 300px;
+        }
+        
+        .chart-title {
+            font-size: 14px;
+            color: var(--aspen-dark);
+            margin-bottom: 15px;
+            font-weight: bold;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        /* Página de Parâmetros */
+        .parameters-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .parameter-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .section-title {
+            color: var(--aspen-blue);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        /* Página de Resultados */
+        .results-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        /* Formulários */
         .form-group {
             margin-bottom: 15px;
         }
@@ -152,71 +338,204 @@
             background-color: var(--aspen-dark);
         }
         
-        /* Gráficos */
-        .chart-container {
-            background-color: white;
-            padding: 20px;
+        /* Toolbox para fluxograma */
+        .flow-toolbox {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            margin-top: 20px;
+            padding: 10px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
         }
         
-        .chart-title {
-            font-size: 14px;
+        .flow-tool {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            cursor: pointer;
+            background-color: #f8f9fa;
+            transition: all 0.2s;
+        }
+        
+        .flow-tool:hover {
+            background-color: #e9ecef;
+        }
+        
+        .flow-tool.active {
+            background-color: var(--aspen-accent);
+            color: white;
+            border-color: var(--aspen-dark);
+        }
+        
+        /* Seleção de elementos */
+        .selection-rect {
+            position: absolute;
+            border: 2px dashed var(--selection-color);
+            background-color: var(--selection-color);
+            pointer-events: none;
+            display: none;
+            z-index: 50;
+        }
+        
+        /* Formulário de propriedades */
+        .properties-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .property-group {
+            margin-bottom: 10px;
+        }
+        
+        .property-label {
+            font-size: 12px;
+            font-weight: 600;
             color: var(--aspen-dark);
+            margin-bottom: 3px;
+        }
+        
+        .property-value {
+            font-size: 13px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            background-color: #f8f9fa;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid #ddd;
             margin-bottom: 15px;
+        }
+        
+        .tab-button {
+            padding: 8px 15px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--aspen-dark);
+        }
+        
+        .tab-button.active {
+            border-bottom-color: var(--aspen-accent);
             font-weight: bold;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
+            color: var(--aspen-blue);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
         }
     </style>
 </head>
 <body>
-    <div class="aspen-container">
+    <div class="app-container">
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
                 <h2>Moagem Simulator</h2>
-                <small>ASPEN-STYLE v1.0</small>
+                <small>BALANÇO DE MASSA v3.0</small>
             </div>
             
-            <div class="nav-item active">
-                <i class="fas fa-project-diagram"></i> Fluxograma
+            <div class="nav-item active" data-page="simulation">
+                <i class="fas fa-project-diagram"></i> Simulação
             </div>
-            <div class="nav-item">
+            <div class="nav-item" data-page="parameters">
                 <i class="fas fa-cog"></i> Parâmetros
             </div>
-            <div class="nav-item">
+            <div class="nav-item" data-page="results">
                 <i class="fas fa-chart-bar"></i> Resultados
-            </div>
-            <div class="nav-item">
-                <i class="fas fa-database"></i> Banco de Dados
-            </div>
-            <div class="nav-item">
-                <i class="fas fa-file-export"></i> Relatórios
             </div>
         </div>
         
         <!-- Main Content -->
         <div class="main-content">
             <div class="toolbar">
-                <div class="tab-container">
-                    <div class="tab active">Fluxograma</div>
-                    <div class="tab">Propriedades</div>
-                    <div class="tab">Análise</div>
-                    <div class="tab">Otimização</div>
+                <button id="run-simulation">
+                    <i class="fas fa-play"></i> Executar Simulação
+                </button>
+                <button id="export-excel">
+                    <i class="fas fa-file-excel"></i> Exportar Excel
+                </button>
+                <button id="clear-flowchart">
+                    <i class="fas fa-trash-alt"></i> Limpar Fluxograma
+                </button>
+                <button id="balance-mass">
+                    <i class="fas fa-calculator"></i> Balanço de Massa
+                </button>
+            </div>
+            
+            <!-- Página de Simulação -->
+            <div class="page active" id="simulation-page">
+                <div class="flowchart-container">
+                    <div class="flow-toolbox">
+                        <div class="flow-tool active" title="Selecionar/Mover" id="tool-select">
+                            <i class="fas fa-mouse-pointer"></i>
+                        </div>
+                        <div class="flow-tool" title="Adicionar Moinho" id="tool-mill">
+                            <i class="fas fa-cog"></i>
+                        </div>
+                        <div class="flow-tool" title="Adicionar Fluxo" id="tool-stream">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-tool" title="Modo Conexão" id="tool-connect">
+                            <i class="fas fa-link"></i>
+                        </div>
+                        <div class="flow-tool" title="Adicionar Junção" id="tool-junction">
+                            <i class="fas fa-code-branch"></i>
+                        </div>
+                    </div>
+                    
+                    <div id="flowchart"></div>
+                    <div class="selection-rect" id="selection-rect"></div>
+                </div>
+                
+                <div class="summary-container">
+                    <h3 class="summary-title">Resumo da Simulação</h3>
+                    <div class="summary-grid" id="simulation-summary">
+                        <!-- Preenchido dinamicamente -->
+                    </div>
+                </div>
+                
+                <div class="charts-container">
+                    <div class="chart-container">
+                        <div class="chart-title">Distribuição Granulométrica</div>
+                        <canvas id="particle-chart"></canvas>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <div class="chart-title">Consumo Energético</div>
+                        <canvas id="energy-chart"></canvas>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <div class="chart-title">Eficiência de Moagem</div>
+                        <canvas id="efficiency-chart"></canvas>
+                    </div>
                 </div>
             </div>
             
-            <div class="flowchart-container">
-                <!-- Canvas do Fluxograma -->
-                <div id="flowchart"></div>
-                
-                <!-- Painel de Controle -->
-                <div class="control-panel">
-                    <h3 style="color: var(--aspen-blue); margin-top: 0;">Parâmetros de Moagem</h3>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
+            <!-- Página de Parâmetros -->
+            <div class="page" id="parameters-page">
+                <div class="parameters-grid">
+                    <div class="parameter-section">
+                        <h3 class="section-title">Parâmetros de Moagem</h3>
+                        
                         <div class="form-group">
                             <label>Material</label>
                             <select id="material">
@@ -235,14 +554,42 @@
                             <label>Tamanho do Produto (mm)</label>
                             <input type="number" id="product-size" value="0.075" step="0.001">
                         </div>
+                        
+                        <div class="form-group">
+                            <label>Densidade do Mineral (g/cm³)</label>
+                            <input type="number" id="mineral-density" value="4.2" step="0.1">
+                        </div>
                     </div>
                     
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+                    <div class="parameter-section">
+                        <h3 class="section-title">Dimensões do Moinho</h3>
+                        
                         <div class="form-group">
-                            <label>Taxa de Alimentação (ton/h)</label>
-                            <input type="number" id="feed-rate" value="100">
+                            <label>Diâmetro (m)</label>
+                            <input type="number" id="mill-diameter" value="3.5" step="0.1">
                         </div>
                         
+                        <div class="form-group">
+                            <label>Comprimento (m)</label>
+                            <input type="number" id="mill-length" value="5.0" step="0.1">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Volume Útil (m³)</label>
+                            <input type="number" id="mill-volume" value="45.0" step="0.1">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Velocidade de Rotação (rpm)</label>
+                            <input type="number" id="mill-speed" value="15" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="parameter-section" style="margin-top: 20px;">
+                    <h3 class="section-title">Configurações Avançadas</h3>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                         <div class="form-group">
                             <label>Tipo de Moinho</label>
                             <select id="mill-type">
@@ -251,250 +598,1547 @@
                                 <option value="sag">Moinho SAG</option>
                             </select>
                         </div>
+                        
+                        <div class="form-group">
+                            <label>Carga de Bolas (%)</label>
+                            <input type="number" id="ball-load" value="30" min="0" max="100">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Tamanho Máximo de Bolas (mm)</label>
+                            <input type="number" id="ball-size" value="80" step="5">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Fator de Correção</label>
+                            <input type="number" id="correction-factor" value="1.0" step="0.1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Página de Resultados -->
+            <div class="page" id="results-page">
+                <div class="results-section">
+                    <h3 class="section-title">Resultados da Simulação</h3>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px;">
+                        <div class="summary-item">
+                            <div class="summary-label">Produtividade</div>
+                            <div class="summary-value" id="result-productivity">98.0</div>
+                            <div class="summary-unit">ton/h</div>
+                        </div>
+                        
+                        <div class="summary-item">
+                            <div class="summary-label">Consumo Específico</div>
+                            <div class="summary-value" id="result-energy">15.5</div>
+                            <div class="summary-unit">kWh/ton</div>
+                        </div>
+                        
+                        <div class="summary-item">
+                            <div class="summary-label">Eficiência</div>
+                            <div class="summary-value" id="result-efficiency">85.3</div>
+                            <div class="summary-unit">%</div>
+                        </div>
+                        
+                        <div class="summary-item">
+                            <div class="summary-label">Tempo de Residência</div>
+                            <div class="summary-value" id="result-residence">12.5</div>
+                            <div class="summary-unit">minutos</div>
+                        </div>
                     </div>
                     
-                    <button id="run-simulation" style="margin-top: 20px; width: 200px;">
-                        <i class="fas fa-play"></i> Executar Simulação
-                    </button>
-                </div>
-                
-                <!-- Gráficos de Resultados -->
-                <div class="chart-container">
-                    <div class="chart-title">Distribuição Granulométrica</div>
-                    <canvas id="particle-chart"></canvas>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
-                    <div class="chart-container">
-                        <div class="chart-title">Consumo Energético</div>
-                        <canvas id="energy-chart"></canvas>
-                    </div>
-                    
-                    <div class="chart-container">
-                        <div class="chart-title">Eficiência de Moagem</div>
-                        <canvas id="efficiency-chart"></canvas>
+                    <div class="charts-container">
+                        <div class="chart-container">
+                            <div class="chart-title">Distribuição Granulométrica</div>
+                            <canvas id="results-particle-chart"></canvas>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <div class="chart-title">Consumo de Energia</div>
+                            <canvas id="results-energy-chart"></canvas>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <div class="chart-title">Análise de Eficiência</div>
+                            <canvas id="results-efficiency-chart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Modal de Edição de Fluxo -->
+    <div class="modal-overlay" id="stream-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Editar Fluxo</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            
+            <div class="tab-buttons">
+                <button class="tab-button active" data-tab="basic">Básico</button>
+                <button class="tab-button" data-tab="advanced">Avançado</button>
+                <button class="tab-button" data-tab="mass-balance">Balanço de Massa</button>
+            </div>
+            
+            <div class="tab-content active" id="basic-tab">
+                <div class="form-group">
+                    <label>Nome do Fluxo</label>
+                    <input type="text" id="stream-name" placeholder="Ex: Alimentação, Produto">
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Fluxo</label>
+                    <select id="stream-type">
+                        <option value="input">Entrada</option>
+                        <option value="output">Saída</option>
+                        <option value="recycle">Reciclo</option>
+                        <option value="junction">Junção</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Vazão de Polpa (m³/h)</label>
+                    <input type="number" id="stream-pulp-flow" value="100" step="0.1">
+                </div>
+            </div>
+            
+            <div class="tab-content" id="advanced-tab">
+                <div class="form-group">
+                    <label>Tamanho de Partícula (mm)</label>
+                    <input type="number" id="stream-size" value="25.0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>% Sólidos</label>
+                    <input type="number" id="stream-solids" value="75" min="0" max="100" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>Umidade (%)</label>
+                    <input type="number" id="stream-moisture" value="5" min="0" max="100" step="0.1">
+                </div>
+            </div>
+            
+            <div class="tab-content" id="mass-balance-tab">
+                <div class="properties-grid">
+                    <div class="property-group">
+                        <div class="property-label">Vazão em Massa Seca (ton/h)</div>
+                        <div class="property-value" id="dry-mass-flow">0.0</div>
+                    </div>
+                    <div class="property-group">
+                        <div class="property-label">Vazão de Água (m³/h)</div>
+                        <div class="property-value" id="water-flow">0.0</div>
+                    </div>
+                    <div class="property-group">
+                        <div class="property-label">Densidade da Polpa (g/cm³)</div>
+                        <div class="property-value" id="pulp-density">0.0</div>
+                    </div>
+                    <div class="property-group">
+                        <div class="property-label">AI (Água/Insumo)</div>
+                        <div class="property-value" id="ai-ratio">0.0</div>
+                    </div>
+                    <div class="property-group">
+                        <div class="property-label">WI (Água/Sólidos)</div>
+                        <div class="property-value" id="wi-ratio">0.0</div>
+                    </div>
+                    <div class="property-group">
+                        <div class="property-label">% Sólidos Peso</div>
+                        <div class="property-value" id="solids-weight">0.0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <button id="save-stream">Salvar Alterações</button>
+        </div>
+    </div>
+
+    <!-- Menu de Contexto -->
+    <div class="context-menu" id="context-menu">
+        <div class="context-menu-item" id="context-edit">
+            <i class="fas fa-edit"></i> Editar
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item delete" id="context-delete">
+            <i class="fas fa-trash-alt"></i> Deletar
+        </div>
+    </div>
+
     <script>
-        // Inicialização do Fluxograma com Konva
+        // Dados da simulação
+        let simulationData = {
+            parameters: {
+                material: "Minério de Ferro",
+                feedSize: 25.0,
+                productSize: 0.075,
+                mineralDensity: 4.2,
+                millType: "Moinho de Bolas",
+                millDiameter: 3.5,
+                millLength: 5.0,
+                millVolume: 45.0,
+                millSpeed: 15,
+                ballLoad: 30,
+                ballSize: 80,
+                correctionFactor: 1.0
+            },
+            results: {
+                productivity: 98.0,
+                energy: 15.5,
+                efficiency: 85.3,
+                residenceTime: 12.5,
+                particleDistribution: [
+                    { size: 25.0, passing: 100 },
+                    { size: 10.0, passing: 85 },
+                    { size: 5.0, passing: 70 },
+                    { size: 1.0, passing: 50 },
+                    { size: 0.5, passing: 30 },
+                    { size: 0.1, passing: 10 },
+                    { size: 0.075, passing: 5 }
+                ],
+                simulationStatus: "not-run", // "not-run", "success", "error"
+                massBalance: {
+                    calculated: false,
+                    balanced: false
+                }
+            },
+            streams: {}
+        };
+
+        // Variáveis para controle do fluxograma
+        let selectedTool = "select";
+        let connecting = false;
+        let connectionStart = null;
+        let selectedElement = null;
+        let nodes = [];
+        let streams = [];
+        let junctions = [];
+        let connections = [];
+        let isSelecting = false;
+        let selectionStart = { x: 0, y: 0 };
+        let selectedElements = [];
+
+        // Sistema de Navegação
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                // Remover classe active de todos os itens
+                document.querySelectorAll('.nav-item').forEach(nav => {
+                    nav.classList.remove('active');
+                });
+                
+                // Adicionar classe active ao item clicado
+                this.classList.add('active');
+                
+                // Esconder todas as páginas
+                document.querySelectorAll('.page').forEach(page => {
+                    page.classList.remove('active');
+                });
+                
+                // Mostrar a página correspondente
+                const pageId = this.getAttribute('data-page') + '-page';
+                document.getElementById(pageId).classList.add('active');
+            });
+        });
+
+        // Inicializar Fluxograma
         const stage = new Konva.Stage({
             container: 'flowchart',
-            width: 1000,
-            height: 600
+            width: document.querySelector('#flowchart').offsetWidth,
+            height: document.querySelector('#flowchart').offsetHeight
         });
 
         const layer = new Konva.Layer();
         stage.add(layer);
 
-        // Cores do Tema Aspen
-        const aspenColors = {
-            primary: '#005b96',
-            secondary: '#00a3e0',
-            equipment: '#6c757d',
-            stream: '#28a745',
-            text: '#212529'
-        };
-
-        // Desenhar Moinho
-        const mill = new Konva.Group({
-            x: 400,
-            y: 200
+        // Ferramentas do fluxograma
+        document.getElementById('tool-mill').addEventListener('click', () => {
+            selectedTool = 'mill';
+            updateToolSelection();
         });
 
-        const millBody = new Konva.Circle({
-            radius: 80,
-            fill: aspenColors.equipment,
-            stroke: aspenColors.primary,
-            strokeWidth: 2
+        document.getElementById('tool-stream').addEventListener('click', () => {
+            selectedTool = 'stream';
+            updateToolSelection();
         });
 
-        const millText = new Konva.Text({
-            text: 'MOINHO\nDE BOLAS',
-            fontSize: 14,
-            fontFamily: 'Arial',
-            fill: 'white',
-            align: 'center',
-            width: 160,
-            y: -10
+        document.getElementById('tool-connect').addEventListener('click', () => {
+            selectedTool = 'connect';
+            updateToolSelection();
         });
 
-        mill.add(millBody);
-        mill.add(millText);
-        layer.add(mill);
-
-        // Desenhar Fluxo de Entrada
-        const inputStream = new Konva.Arrow({
-            points: [200, 220, 320, 220],
-            pointerLength: 10,
-            pointerWidth: 10,
-            fill: aspenColors.stream,
-            stroke: aspenColors.stream,
-            strokeWidth: 3
+        document.getElementById('tool-select').addEventListener('click', () => {
+            selectedTool = 'select';
+            updateToolSelection();
         });
 
-        const inputLabel = new Konva.Text({
-            text: 'Alimentação\n25.0 mm\n100 ton/h',
-            fontSize: 12,
-            fontFamily: 'Arial',
-            fill: aspenColors.text,
-            x: 100,
-            y: 200
+        document.getElementById('tool-junction').addEventListener('click', () => {
+            selectedTool = 'junction';
+            updateToolSelection();
         });
 
-        layer.add(inputStream);
-        layer.add(inputLabel);
+        function updateToolSelection() {
+            document.querySelectorAll('.flow-tool').forEach(tool => {
+                tool.classList.remove('active');
+            });
+            
+            document.getElementById('tool-' + selectedTool).classList.add('active');
+        }
 
-        // Desenhar Fluxo de Saída
-        const outputStream = new Konva.Arrow({
-            points: [480, 250, 600, 250],
-            pointerLength: 10,
-            pointerWidth: 10,
-            fill: aspenColors.stream,
-            stroke: aspenColors.stream,
-            strokeWidth: 3
-        });
+        // Adicionar moinho ao fluxograma
+        function addMill(x, y) {
+            const millGroup = new Konva.Group({
+                x: x,
+                y: y,
+                draggable: true,
+                id: 'mill-' + Date.now(),
+                type: 'mill'
+            });
 
-        const outputLabel = new Konva.Text({
-            text: 'Produto\n0.075 mm\n98 ton/h',
-            fontSize: 12,
-            fontFamily: 'Arial',
-            fill: aspenColors.text,
-            x: 620,
-            y: 230
-        });
+            // Corpo do moinho (cilindro)
+            const millBody = new Konva.Rect({
+                width: 120,
+                height: 80,
+                cornerRadius: 40,
+                fill: '#6c757d',
+                stroke: '#005b96',
+                strokeWidth: 2,
+                name: 'mill-body'
+            });
 
-        layer.add(outputStream);
-        layer.add(outputLabel);
+            // Texto do moinho
+            const millText = new Konva.Text({
+                text: 'MOINHO\nDE BOLAS',
+                fontSize: 14,
+                fontFamily: 'Arial',
+                fill: 'white',
+                align: 'center',
+                width: 120,
+                y: 25,
+                name: 'mill-text'
+            });
 
-        // Inicializar Gráficos
-        const particleCtx = document.getElementById('particle-chart').getContext('2d');
-        const energyCtx = document.getElementById('energy-chart').getContext('2d');
-        const efficiencyCtx = document.getElementById('efficiency-chart').getContext('2d');
+            // Pontos de conexão
+            const connectionPoints = [
+                { x: -10, y: 20, type: 'input' },
+                { x: -10, y: 60, type: 'input' },
+                { x: 130, y: 20, type: 'output' },
+                { x: 130, y: 60, type: 'output' }
+            ];
 
-        const particleChart = new Chart(particleCtx, {
-            type: 'line',
-            data: {
-                labels: ['25.0', '10.0', '5.0', '1.0', '0.5', '0.1', '0.075'],
-                datasets: [{
-                    label: '% Passante',
-                    data: [100, 85, 70, 50, 30, 10, 5],
-                    borderColor: aspenColors.primary,
-                    backgroundColor: 'rgba(0, 91, 150, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false
+            connectionPoints.forEach((point, i) => {
+                const connector = new Konva.Circle({
+                    x: point.x,
+                    y: point.y,
+                    radius: 5,
+                    fill: point.type === 'input' ? '#28a745' : '#dc3545',
+                    stroke: 'white',
+                    strokeWidth: 1,
+                    opacity: 0,
+                    id: 'connector-' + i,
+                    name: 'connector',
+                    connectorType: point.type
+                });
+
+                connector.on('mouseover', function() {
+                    if (selectedTool === 'connect') {
+                        this.opacity(1);
+                        layer.draw();
+                        document.body.style.cursor = 'pointer';
                     }
-                },
-                scales: {
-                    y: {
-                        title: {
-                            display: true,
-                            text: '% Passante'
-                        },
-                        min: 0,
-                        max: 100
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Tamanho (mm)'
+                });
+
+                connector.on('mouseout', function() {
+                    if (!connecting) {
+                        this.opacity(0);
+                        layer.draw();
+                    }
+                    document.body.style.cursor = 'default';
+                });
+
+                connector.on('click', function(e) {
+                    e.cancelBubble = true;
+                    if (selectedTool === 'connect') {
+                        if (!connecting) {
+                            connectionStart = {
+                                node: millGroup,
+                                connector: this,
+                                type: point.type
+                            };
+                            connecting = true;
+                            this.opacity(1);
+                            document.body.style.cursor = 'crosshair';
+                        } else {
+                            // Finalizar conexão
+                            if (connectionStart.type !== point.type && 
+                                connectionStart.node.id() !== millGroup.id()) {
+                                createConnection(connectionStart, {
+                                    node: millGroup,
+                                    connector: this,
+                                    type: point.type
+                                });
+                            }
+                            connecting = false;
+                            this.opacity(0);
+                            document.body.style.cursor = 'default';
+                            connectionStart = null;
                         }
+                        layer.draw();
                     }
-                }
-            }
-        });
+                });
 
-        const energyChart = new Chart(energyCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Consumo Específico', 'Total'],
-                datasets: [{
-                    label: 'kWh/ton',
-                    data: [15, 1500],
-                    backgroundColor: [
-                        aspenColors.secondary,
-                        aspenColors.primary
-                    ]
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Energia (kWh)'
-                        },
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
+                millGroup.add(connector);
+            });
 
-        const efficiencyChart = new Chart(efficiencyCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Eficiência', 'Perdas'],
-                datasets: [{
-                    data: [85, 15],
-                    backgroundColor: [
-                        aspenColors.primary,
-                        '#dc3545'
-                    ],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                cutout: '70%',
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
+            millGroup.on('dragstart', function() {
+                this.moveToTop();
+                layer.draw();
+            });
 
-        // Atualizar Simulação
-        document.getElementById('run-simulation').addEventListener('click', function() {
-            // Obter valores dos inputs
-            const feedSize = parseFloat(document.getElementById('feed-size').value);
-            const productSize = parseFloat(document.getElementById('product-size').value);
-            const feedRate = parseFloat(document.getElementById('feed-rate').value);
-            const millType = document.getElementById('mill-type').value;
+            millGroup.on('dragmove', function() {
+                // Atualizar posições das conexões
+                updateConnections();
+            });
+
+            millGroup.on('click', function(e) {
+                if (selectedTool === 'select') {
+                    selectElement(this);
+                    e.cancelBubble = true;
+                }
+            });
+
+            millGroup.on('contextmenu', function(e) {
+                e.evt.preventDefault();
+                selectElement(this);
+                showContextMenu(e.evt.clientX, e.evt.clientY, 'mill');
+                e.cancelBubble = true;
+            });
+
+            millGroup.add(millBody);
+            millGroup.add(millText);
+            layer.add(millGroup);
+            nodes.push(millGroup);
+
+            return millGroup;
+        }
+
+        // Adicionar fluxo ao fluxograma
+        function addStream(x, y, type = 'input') {
+            const streamGroup = new Konva.Group({
+                x: x,
+                y: y,
+                draggable: true,
+                id: 'stream-' + Date.now(),
+                type: 'stream',
+                streamType: type
+            });
+
+            const arrowColor = type === 'input' ? '#28a745' : 
+                             type === 'output' ? '#dc3545' : 
+                             type === 'recycle' ? '#6c757d' : '#0077c8';
             
-            // Atualizar Fluxograma
-            inputLabel.text(`Alimentação\n${feedSize.toFixed(1)} mm\n${feedRate} ton/h`);
-            outputLabel.text(`Produto\n${productSize.toFixed(3)} mm\n${(feedRate * 0.98).toFixed(1)} ton/h`);
+            const arrow = new Konva.Arrow({
+                points: [0, 0, 100, 0],
+                pointerLength: 10,
+                pointerWidth: 10,
+                fill: arrowColor,
+                stroke: arrowColor,
+                strokeWidth: 3,
+                name: 'stream-arrow'
+            });
+
+            const label = new Konva.Text({
+                text: type === 'input' ? 'Alimentação\n25.0 mm\n100 m³/h' : 
+                      type === 'output' ? 'Produto\n0.075 mm\n98 m³/h' : 
+                      type === 'recycle' ? 'Reciclo\n1.2 mm\n15 m³/h' : 'Junção\n-',
+                fontSize: 12,
+                fontFamily: 'Arial',
+                fill: '#212529',
+                x: type === 'input' ? -90 : 110,
+                y: -20,
+                width: 80,
+                align: type === 'input' ? 'right' : 'left',
+                name: 'stream-label'
+            });
+
+            // Ponto de conexão
+            const connector = new Konva.Circle({
+                x: type === 'input' ? 100 : 0,
+                y: 0,
+                radius: 5,
+                fill: type === 'input' ? '#dc3545' : '#28a745',
+                stroke: 'white',
+                strokeWidth: 1,
+                opacity: 0,
+                name: 'connector',
+                connectorType: type === 'input' ? 'output' : 'input'
+            });
+
+            connector.on('mouseover', function() {
+                if (selectedTool === 'connect') {
+                    this.opacity(1);
+                    layer.draw();
+                    document.body.style.cursor = 'pointer';
+                }
+            });
+
+            connector.on('mouseout', function() {
+                if (!connecting) {
+                    this.opacity(0);
+                    layer.draw();
+                }
+                document.body.style.cursor = 'default';
+            });
+
+            connector.on('click', function(e) {
+                e.cancelBubble = true;
+                if (selectedTool === 'connect') {
+                    if (!connecting) {
+                        connectionStart = {
+                            node: streamGroup,
+                            connector: this,
+                            type: this.attrs.connectorType
+                        };
+                        connecting = true;
+                        this.opacity(1);
+                        document.body.style.cursor = 'crosshair';
+                    } else {
+                        // Finalizar conexão
+                        if (connectionStart.type !== this.attrs.connectorType && 
+                            connectionStart.node.id() !== streamGroup.id()) {
+                            createConnection(connectionStart, {
+                                node: streamGroup,
+                                connector: this,
+                                type: this.attrs.connectorType
+                            });
+                        }
+                        connecting = false;
+                        this.opacity(0);
+                        document.body.style.cursor = 'default';
+                        connectionStart = null;
+                    }
+                    layer.draw();
+                }
+            });
+
+            streamGroup.on('dragstart', function() {
+                this.moveToTop();
+                layer.draw();
+            });
+
+            streamGroup.on('dragmove', function() {
+                // Atualizar posições das conexões
+                updateConnections();
+            });
+
+            streamGroup.on('click', function(e) {
+                if (selectedTool === 'select') {
+                    selectElement(this);
+                    e.cancelBubble = true;
+                }
+            });
+
+            streamGroup.on('contextmenu', function(e) {
+                e.evt.preventDefault();
+                selectElement(this);
+                showContextMenu(e.evt.clientX, e.evt.clientY, 'stream');
+                e.cancelBubble = true;
+            });
+
+            streamGroup.add(arrow);
+            streamGroup.add(label);
+            streamGroup.add(connector);
+            layer.add(streamGroup);
+            streams.push(streamGroup);
+
+            // Adicionar aos dados da simulação
+            simulationData.streams[streamGroup.id()] = {
+                name: type === 'input' ? 'Alimentação' : type === 'output' ? 'Produto' : 'Reciclo',
+                type: type,
+                pulpFlow: type === 'input' ? 100 : type === 'output' ? 98 : 15,
+                size: type === 'input' ? 25.0 : type === 'output' ? 0.075 : 1.2,
+                solids: 75,
+                moisture: 5,
+                dryMassFlow: 0,
+                waterFlow: 0,
+                pulpDensity: 0,
+                aiRatio: 0,
+                wiRatio: 0,
+                solidsWeight: 0
+            };
+
+            return streamGroup;
+        }
+
+        // Adicionar junção ao fluxograma
+        function addJunction(x, y) {
+            const junctionGroup = new Konva.Group({
+                x: x,
+                y: y,
+                draggable: true,
+                id: 'junction-' + Date.now(),
+                type: 'junction'
+            });
+
+            // Corpo da junção (círculo)
+            const junctionBody = new Konva.Circle({
+                radius: 20,
+                fill: '#0077c8',
+                stroke: '#005b96',
+                strokeWidth: 2,
+                name: 'junction-body'
+            });
+
+            // Texto da junção
+            const junctionText = new Konva.Text({
+                text: 'J',
+                fontSize: 16,
+                fontFamily: 'Arial',
+                fill: 'white',
+                align: 'center',
+                width: 40,
+                x: -20,
+                y: -8,
+                name: 'junction-text'
+            });
+
+            // Pontos de conexão
+            const connectionPoints = [
+                { x: -20, y: 0, type: 'input' },
+                { x: 20, y: 0, type: 'output' },
+                { x: 0, y: -20, type: 'input' },
+                { x: 0, y: 20, type: 'output' }
+            ];
+
+            connectionPoints.forEach((point, i) => {
+                const connector = new Konva.Circle({
+                    x: point.x,
+                    y: point.y,
+                    radius: 5,
+                    fill: point.type === 'input' ? '#28a745' : '#dc3545',
+                    stroke: 'white',
+                    strokeWidth: 1,
+                    opacity: 0,
+                    id: 'connector-' + i,
+                    name: 'connector',
+                    connectorType: point.type
+                });
+
+                connector.on('mouseover', function() {
+                    if (selectedTool === 'connect') {
+                        this.opacity(1);
+                        layer.draw();
+                        document.body.style.cursor = 'pointer';
+                    }
+                });
+
+                connector.on('mouseout', function() {
+                    if (!connecting) {
+                        this.opacity(0);
+                        layer.draw();
+                    }
+                    document.body.style.cursor = 'default';
+                });
+
+                connector.on('click', function(e) {
+                    e.cancelBubble = true;
+                    if (selectedTool === 'connect') {
+                        if (!connecting) {
+                            connectionStart = {
+                                node: junctionGroup,
+                                connector: this,
+                                type: point.type
+                            };
+                            connecting = true;
+                            this.opacity(1);
+                            document.body.style.cursor = 'crosshair';
+                        } else {
+                            // Finalizar conexão
+                            if (connectionStart.type !== point.type && 
+                                connectionStart.node.id() !== junctionGroup.id()) {
+                                createConnection(connectionStart, {
+                                    node: junctionGroup,
+                                    connector: this,
+                                    type: point.type
+                                });
+                            }
+                            connecting = false;
+                            this.opacity(0);
+                            document.body.style.cursor = 'default';
+                            connectionStart = null;
+                        }
+                        layer.draw();
+                    }
+                });
+
+                junctionGroup.add(connector);
+            });
+
+            junctionGroup.on('dragstart', function() {
+                this.moveToTop();
+                layer.draw();
+            });
+
+            junctionGroup.on('dragmove', function() {
+                // Atualizar posições das conexões
+                updateConnections();
+            });
+
+            junctionGroup.on('click', function(e) {
+                if (selectedTool === 'select') {
+                    selectElement(this);
+                    e.cancelBubble = true;
+                }
+            });
+
+            junctionGroup.on('contextmenu', function(e) {
+                e.evt.preventDefault();
+                selectElement(this);
+                showContextMenu(e.evt.clientX, e.evt.clientY, 'junction');
+                e.cancelBubble = true;
+            });
+
+            junctionGroup.add(junctionBody);
+            junctionGroup.add(junctionText);
+            layer.add(junctionGroup);
+            junctions.push(junctionGroup);
+
+            return junctionGroup;
+        }
+
+        // Criar conexão entre elementos
+        function createConnection(start, end) {
+            // Verificar se já existe uma conexão entre esses pontos
+            const existingConnection = connections.find(conn => {
+                return (conn.start.node.id() === start.node.id() && 
+                        conn.end.node.id() === end.node.id()) ||
+                       (conn.start.node.id() === end.node.id() && 
+                        conn.end.node.id() === start.node.id());
+            });
+
+            if (existingConnection) {
+                return; // Não criar conexão duplicada
+            }
+
+            const line = new Konva.Arrow({
+                points: [
+                    start.node.x() + start.connector.x(),
+                    start.node.y() + start.connector.y(),
+                    end.node.x() + end.connector.x(),
+                    end.node.y() + end.connector.y()
+                ],
+                pointerLength: 10,
+                pointerWidth: 10,
+                fill: '#0077c8',
+                stroke: '#0077c8',
+                strokeWidth: 2,
+                id: 'connection-' + Date.now(),
+                name: 'connection-line'
+            });
+
+            // Tornar a conexão clicável
+            line.on('click', function(e) {
+                if (selectedTool === 'select') {
+                    selectElement(this);
+                    e.cancelBubble = true;
+                }
+            });
+
+            line.on('contextmenu', function(e) {
+                e.evt.preventDefault();
+                selectElement(this);
+                showContextMenu(e.evt.clientX, e.evt.clientY, 'connection');
+                e.cancelBubble = true;
+            });
+
+            connections.push({
+                line: line,
+                start: start,
+                end: end
+            });
+
+            layer.add(line);
+            layer.draw();
+        }
+
+        // Atualizar conexões quando os elementos são movidos
+        function updateConnections() {
+            connections.forEach(conn => {
+                const { line, start, end } = conn;
+                line.points([
+                    start.node.x() + start.connector.x(),
+                    start.node.y() + start.connector.y(),
+                    end.node.x() + end.connector.x(),
+                    end.node.y() + end.connector.y()
+                ]);
+            });
+            layer.draw();
+        }
+
+        // Selecionar elemento
+        function selectElement(element) {
+            // Desselecionar todos os elementos primeiro
+            deselectAll();
             
-            // Atualizar texto do moinho
-            millText.text(`MOINHO\n${millType.toUpperCase().replace('BALL', 'DE BOLAS').replace('ROD', 'DE BARRAS').replace('SAG', 'SAG')}`);
+            selectedElement = element;
             
-            // Gerar dados simulados
-            const simulatedData = generateSimulationData(feedSize, productSize, feedRate, millType);
-            
-            // Atualizar gráficos
-            updateCharts(simulatedData);
+            // Destacar o elemento selecionado
+            if (element.id().startsWith('mill-')) {
+                element.find('.mill-body')[0].stroke('#00a3e0');
+                element.find('.mill-body')[0].strokeWidth(3);
+            } else if (element.id().startsWith('stream-')) {
+                const arrow = element.find('.stream-arrow')[0];
+                arrow.stroke('#00a3e0');
+                arrow.strokeWidth(4);
+            } else if (element.id().startsWith('junction-')) {
+                element.find('.junction-body')[0].stroke('#00a3e0');
+                element.find('.junction-body')[0].strokeWidth(3);
+            } else if (element.name === 'connection-line') {
+                element.stroke('#00a3e0');
+                element.strokeWidth(3);
+            }
             
             layer.draw();
+        }
+
+        // Desselecionar todos os elementos
+        function deselectAll() {
+            // Desselecionar moinhos
+            nodes.forEach(node => {
+                const body = node.find('.mill-body')[0];
+                if (body) {
+                    body.stroke('#005b96');
+                    body.strokeWidth(2);
+                }
+            });
+            
+            // Desselecionar fluxos
+            streams.forEach(stream => {
+                const arrow = stream.find('.stream-arrow')[0];
+                if (arrow) {
+                    arrow.stroke(arrow.fill());
+                    arrow.strokeWidth(3);
+                }
+            });
+            
+            // Desselecionar junções
+            junctions.forEach(junction => {
+                const body = junction.find('.junction-body')[0];
+                if (body) {
+                    body.stroke('#005b96');
+                    body.strokeWidth(2);
+                }
+            });
+            
+            // Desselecionar conexões
+            connections.forEach(conn => {
+                conn.line.stroke('#0077c8');
+                conn.line.strokeWidth(2);
+            });
+            
+            selectedElement = null;
+            layer.draw();
+        }
+
+        // Mostrar menu de contexto
+        function showContextMenu(x, y, type) {
+            const contextMenu = document.getElementById('context-menu');
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = x + 'px';
+            contextMenu.style.top = y + 'px';
+            
+            // Configurar ações do menu
+            document.getElementById('context-edit').onclick = function() {
+                if (type === 'stream') {
+                    openStreamModal(selectedElement);
+                }
+                contextMenu.style.display = 'none';
+            };
+            
+            document.getElementById('context-delete').onclick = function() {
+                deleteSelectedElement();
+                contextMenu.style.display = 'none';
+            };
+            
+            // Fechar menu ao clicar em qualquer lugar
+            const closeMenu = function(e) {
+                if (!contextMenu.contains(e.target)) {
+                    contextMenu.style.display = 'none';
+                    document.removeEventListener('click', closeMenu);
+                }
+            };
+            
+            setTimeout(() => {
+                document.addEventListener('click', closeMenu);
+            }, 10);
+        }
+
+        // Deletar elemento selecionado
+        function deleteSelectedElement() {
+            if (!selectedElement) return;
+            
+            if (selectedElement.id().startsWith('mill-')) {
+                // Remover moinho e suas conexões
+                const millId = selectedElement.id();
+                connections = connections.filter(conn => {
+                    if (conn.start.node.id() === millId || conn.end.node.id() === millId) {
+                        conn.line.destroy();
+                        return false;
+                    }
+                    return true;
+                });
+                
+                selectedElement.destroy();
+                nodes = nodes.filter(node => node.id() !== millId);
+            } 
+            else if (selectedElement.id().startsWith('stream-')) {
+                // Remover fluxo e suas conexões
+                const streamId = selectedElement.id();
+                connections = connections.filter(conn => {
+                    if (conn.start.node.id() === streamId || conn.end.node.id() === streamId) {
+                        conn.line.destroy();
+                        return false;
+                    }
+                    return true;
+                });
+                
+                selectedElement.destroy();
+                streams = streams.filter(stream => stream.id() !== streamId);
+                delete simulationData.streams[streamId];
+            }
+            else if (selectedElement.id().startsWith('junction-')) {
+                // Remover junção e suas conexões
+                const junctionId = selectedElement.id();
+                connections = connections.filter(conn => {
+                    if (conn.start.node.id() === junctionId || conn.end.node.id() === junctionId) {
+                        conn.line.destroy();
+                        return false;
+                    }
+                    return true;
+                });
+                
+                selectedElement.destroy();
+                junctions = junctions.filter(junction => junction.id() !== junctionId);
+            }
+            else if (selectedElement.name === 'connection-line') {
+                // Remover apenas a conexão
+                const connectionId = selectedElement.id();
+                connections = connections.filter(conn => conn.line.id() !== connectionId);
+                selectedElement.destroy();
+            }
+            
+            selectedElement = null;
+            layer.draw();
+        }
+
+        // Abrir modal para editar fluxo
+        function openStreamModal(streamGroup) {
+            const modal = document.getElementById('stream-modal');
+            modal.style.display = 'flex';
+            
+            // Configurar tabs
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    document.querySelectorAll('.tab-button').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    document.getElementById(this.getAttribute('data-tab') + '-tab').classList.add('active');
+                });
+            });
+            
+            // Obter dados do fluxo
+            const streamData = simulationData.streams[streamGroup.id()] || {
+                name: 'Fluxo',
+                type: 'input',
+                pulpFlow: 100,
+                size: 25.0,
+                solids: 75,
+                moisture: 5
+            };
+            
+            // Preencher formulário com dados atuais
+            document.getElementById('stream-name').value = streamData.name;
+            document.getElementById('stream-type').value = streamData.type;
+            document.getElementById('stream-pulp-flow').value = streamData.pulpFlow;
+            document.getElementById('stream-size').value = streamData.size;
+            document.getElementById('stream-solids').value = streamData.solids;
+            document.getElementById('stream-moisture').value = streamData.moisture;
+            
+            // Calcular e mostrar propriedades de balanço de massa
+            calculateMassBalance(streamGroup.id());
+            
+            // Fechar modal
+            document.querySelector('.close-modal').addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+            
+            // Salvar alterações
+            document.getElementById('save-stream').addEventListener('click', () => {
+                const name = document.getElementById('stream-name').value;
+                const type = document.getElementById('stream-type').value;
+                const pulpFlow = parseFloat(document.getElementById('stream-pulp-flow').value);
+                const size = parseFloat(document.getElementById('stream-size').value);
+                const solids = parseFloat(document.getElementById('stream-solids').value);
+                const moisture = parseFloat(document.getElementById('stream-moisture').value);
+                
+                // Atualizar fluxo visual
+                const arrowColor = type === 'input' ? '#28a745' : 
+                                 type === 'output' ? '#dc3545' : 
+                                 type === 'recycle' ? '#6c757d' : '#0077c8';
+                
+                const arrow = streamGroup.find('.stream-arrow')[0];
+                arrow.fill(arrowColor);
+                arrow.stroke(arrowColor);
+                arrow.strokeWidth(3);
+                
+                const label = streamGroup.find('.stream-label')[0];
+                label.text(`${name}\n${size} mm\n${pulpFlow} m³/h`);
+                label.x(type === 'input' ? -90 : 110);
+                label.align(type === 'input' ? 'right' : 'left');
+                
+                // Atualizar dados da simulação
+                simulationData.streams[streamGroup.id()] = {
+                    name: name,
+                    type: type,
+                    pulpFlow: pulpFlow,
+                    size: size,
+                    solids: solids,
+                    moisture: moisture,
+                    dryMassFlow: parseFloat(document.getElementById('dry-mass-flow').textContent),
+                    waterFlow: parseFloat(document.getElementById('water-flow').textContent),
+                    pulpDensity: parseFloat(document.getElementById('pulp-density').textContent),
+                    aiRatio: parseFloat(document.getElementById('ai-ratio').textContent),
+                    wiRatio: parseFloat(document.getElementById('wi-ratio').textContent),
+                    solidsWeight: parseFloat(document.getElementById('solids-weight').textContent)
+                };
+                
+                // Se for fluxo principal, atualizar parâmetros gerais
+                if (name.toLowerCase().includes('alimentação')) {
+                    simulationData.parameters.feedSize = size;
+                } else if (name.toLowerCase().includes('produto')) {
+                    simulationData.parameters.productSize = size;
+                }
+                
+                modal.style.display = 'none';
+                layer.draw();
+                updateSummary();
+            }, { once: true });
+        }
+
+        // Calcular balanço de massa para um fluxo
+        function calculateMassBalance(streamId) {
+            const streamData = simulationData.streams[streamId];
+            if (!streamData) return;
+            
+            const mineralDensity = parseFloat(document.getElementById('mineral-density').value);
+            const pulpFlow = streamData.pulpFlow;
+            const solids = streamData.solids;
+            const moisture = streamData.moisture;
+            
+            // Cálculos de balanço de massa
+            const solidsWeight = solids; // % sólidos em peso (assumindo que já está em %)
+            const waterWeight = 100 - solidsWeight; // % água em peso
+            
+            // Densidade da polpa (em g/cm³)
+            const pulpDensity = 1 / ((solidsWeight/100)/mineralDensity + (waterWeight/100)/1.0);
+            
+            // Vazão em massa seca (ton/h)
+            const dryMassFlow = (pulpFlow * pulpDensity * solidsWeight/100).toFixed(2);
+            
+            // Vazão de água (m³/h)
+            const waterFlow = (pulpFlow * waterWeight/100).toFixed(2);
+            
+            // Razão Água/Insumo (AI)
+            const aiRatio = (waterFlow / dryMassFlow).toFixed(2);
+            
+            // Razão Água/Sólidos (WI)
+            const wiRatio = (waterFlow / (dryMassFlow * (1 - moisture/100))).toFixed(2);
+            
+            // Atualizar valores no modal
+            document.getElementById('dry-mass-flow').textContent = dryMassFlow;
+            document.getElementById('water-flow').textContent = waterFlow;
+            document.getElementById('pulp-density').textContent = pulpDensity.toFixed(2);
+            document.getElementById('ai-ratio').textContent = aiRatio;
+            document.getElementById('wi-ratio').textContent = wiRatio;
+            document.getElementById('solids-weight').textContent = solidsWeight.toFixed(1);
+            
+            // Atualizar dados do fluxo
+            streamData.dryMassFlow = parseFloat(dryMassFlow);
+            streamData.waterFlow = parseFloat(waterFlow);
+            streamData.pulpDensity = parseFloat(pulpDensity.toFixed(2));
+            streamData.aiRatio = parseFloat(aiRatio);
+            streamData.wiRatio = parseFloat(wiRatio);
+            streamData.solidsWeight = parseFloat(solidsWeight.toFixed(1));
+        }
+
+        // Calcular balanço de massa para todo o sistema
+        function calculateSystemMassBalance() {
+            // Calcular balanço para cada fluxo
+            streams.forEach(stream => {
+                calculateMassBalance(stream.id());
+            });
+            
+            // Verificar consistência do sistema
+            let totalInput = 0;
+            let totalOutput = 0;
+            
+            streams.forEach(stream => {
+                const streamData = simulationData.streams[stream.id()];
+                if (streamData.type === 'input') {
+                    totalInput += streamData.dryMassFlow;
+                } else if (streamData.type === 'output') {
+                    totalOutput += streamData.dryMassFlow;
+                }
+            });
+            
+            const balanceError = Math.abs(totalInput - totalOutput) / totalInput * 100;
+            
+            simulationData.results.massBalance = {
+                calculated: true,
+                balanced: balanceError < 1, // Considera balanceado se erro < 1%
+                totalInput: totalInput,
+                totalOutput: totalOutput,
+                balanceError: balanceError
+            };
+            
+            return simulationData.results.massBalance.balanced;
+        }
+
+        // Adicionar elementos ao clicar no canvas
+        stage.on('click', function(e) {
+            if (e.target === stage) {
+                const pos = stage.getPointerPosition();
+                
+                if (selectedTool === 'mill') {
+                    addMill(pos.x, pos.y);
+                } else if (selectedTool === 'stream') {
+                    addStream(pos.x, pos.y);
+                } else if (selectedTool === 'junction') {
+                    addJunction(pos.x, pos.y);
+                } else if (selectedTool === 'select') {
+                    // Desselecionar tudo se clicou no vazio
+                    deselectAll();
+                }
+            }
         });
 
-        function generateSimulationData(feedSize, productSize, feedRate, millType) {
+        // Iniciar seleção retangular
+        stage.on('mousedown', function(e) {
+            if (e.target === stage && selectedTool === 'select') {
+                isSelecting = true;
+                const pos = stage.getPointerPosition();
+                selectionStart = { x: pos.x, y: pos.y };
+                
+                const selectionRect = document.getElementById('selection-rect');
+                selectionRect.style.left = pos.x + 'px';
+                selectionRect.style.top = pos.y + 'px';
+                selectionRect.style.width = '0';
+                selectionRect.style.height = '0';
+                selectionRect.style.display = 'block';
+            }
+        });
+
+        // Atualizar seleção retangular
+        stage.on('mousemove', function(e) {
+            if (isSelecting) {
+                const pos = stage.getPointerPosition();
+                const selectionRect = document.getElementById('selection-rect');
+                
+                const width = pos.x - selectionStart.x;
+                const height = pos.y - selectionStart.y;
+                
+                selectionRect.style.width = Math.abs(width) + 'px';
+                selectionRect.style.height = Math.abs(height) + 'px';
+                
+                if (width < 0) {
+                    selectionRect.style.left = pos.x + 'px';
+                }
+                
+                if (height < 0) {
+                    selectionRect.style.top = pos.y + 'px';
+                }
+            }
+        });
+
+        // Finalizar seleção retangular
+        stage.on('mouseup', function(e) {
+            if (isSelecting) {
+                isSelecting = false;
+                document.getElementById('selection-rect').style.display = 'none';
+                
+                const pos = stage.getPointerPosition();
+                const endX = pos.x;
+                const endY = pos.y;
+                
+                // Selecionar elementos dentro do retângulo
+                const allElements = [...nodes, ...streams, ...junctions, ...connections.map(c => c.line)];
+                
+                selectedElements = allElements.filter(element => {
+                    const elementPos = element.getAbsolutePosition();
+                    const elementWidth = element.width() || 100;
+                    const elementHeight = element.height() || 40;
+                    
+                    return (
+                        elementPos.x >= Math.min(selectionStart.x, endX) &&
+                        elementPos.x + elementWidth <= Math.max(selectionStart.x, endX) &&
+                        elementPos.y >= Math.min(selectionStart.y, endY) &&
+                        elementPos.y + elementHeight <= Math.max(selectionStart.y, endY)
+                    );
+                });
+                
+                // Destacar elementos selecionados
+                deselectAll();
+                selectedElements.forEach(element => {
+                    if (element.id().startsWith('mill-')) {
+                        element.find('.mill-body')[0].stroke('#00a3e0');
+                        element.find('.mill-body')[0].strokeWidth(3);
+                    } else if (element.id().startsWith('stream-')) {
+                        const arrow = element.find('.stream-arrow')[0];
+                        arrow.stroke('#00a3e0');
+                        arrow.strokeWidth(4);
+                    } else if (element.id().startsWith('junction-')) {
+                        element.find('.junction-body')[0].stroke('#00a3e0');
+                        element.find('.junction-body')[0].strokeWidth(3);
+                    } else if (element.name === 'connection-line') {
+                        element.stroke('#00a3e0');
+                        element.strokeWidth(3);
+                    }
+                });
+                
+                layer.draw();
+            }
+        });
+
+        // Inicializar Gráficos
+        const initChart = (id, type, data, options) => {
+            const ctx = document.getElementById(id).getContext('2d');
+            return new Chart(ctx, {
+                type: type,
+                data: data,
+                options: options
+            });
+        };
+
+        // Gráfico de Distribuição Granulométrica
+        const particleChart = initChart('particle-chart', 'line', {
+            labels: simulationData.results.particleDistribution.map(item => item.size.toFixed(3)),
+            datasets: [{
+                label: '% Passante',
+                data: simulationData.results.particleDistribution.map(item => item.passing),
+                borderColor: '#005b96',
+                backgroundColor: 'rgba(0, 91, 150, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            },
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: '% Passante'
+                    },
+                    min: 0,
+                    max: 100
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Tamanho (mm)'
+                    }
+                }
+            }
+        });
+
+        // Gráfico de Consumo Energético
+        const energyChart = initChart('energy-chart', 'bar', {
+            labels: ['Específico (kWh/t)', 'Total (kWh)'],
+            datasets: [{
+                label: 'Consumo Energético',
+                data: [simulationData.results.energy, simulationData.results.energy * simulationData.parameters.feedRate],
+                backgroundColor: [
+                    '#00a3e0',
+                    '#005b96'
+                ]
+            }]
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Energia (kWh)'
+                    },
+                    beginAtZero: true
+                }
+            }
+        });
+
+        // Gráfico de Eficiência
+        const efficiencyChart = initChart('efficiency-chart', 'doughnut', {
+            labels: ['Eficiência', 'Perdas'],
+            datasets: [{
+                data: [simulationData.results.efficiency, 100 - simulationData.results.efficiency],
+                backgroundColor: [
+                    '#005b96',
+                    '#dc3545'
+                ],
+                borderWidth: 0
+            }]
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        });
+
+        // Gráficos da página de resultados
+        const resultsParticleChart = initChart('results-particle-chart', 'line', {
+            labels: simulationData.results.particleDistribution.map(item => item.size.toFixed(3)),
+            datasets: [{
+                label: '% Passante',
+                data: simulationData.results.particleDistribution.map(item => item.passing),
+                borderColor: '#005b96',
+                backgroundColor: 'rgba(0, 91, 150, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            }
+        });
+
+        const resultsEnergyChart = initChart('results-energy-chart', 'bar', {
+            labels: ['Específico', 'Total'],
+            datasets: [{
+                label: 'Consumo Energético',
+                data: [simulationData.results.energy, simulationData.results.energy * simulationData.parameters.feedRate],
+                backgroundColor: [
+                    '#00a3e0',
+                    '#005b96'
+                ]
+            }]
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        });
+
+        const resultsEfficiencyChart = initChart('results-efficiency-chart', 'doughnut', {
+            labels: ['Eficiência', 'Perdas'],
+            datasets: [{
+                data: [simulationData.results.efficiency, 100 - simulationData.results.efficiency],
+                backgroundColor: [
+                    '#005b96',
+                    '#dc3545'
+                ],
+                borderWidth: 0
+            }]
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        });
+
+        // Atualizar resumo da simulação
+        function updateSummary() {
+            const summaryItems = [
+                { label: "Material", value: simulationData.parameters.material, unit: "" },
+                { label: "Alimentação", value: simulationData.parameters.feedSize, unit: "mm" },
+                { label: "Produto", value: simulationData.parameters.productSize, unit: "mm" },
+                { label: "Densidade Mineral", value: simulationData.parameters.mineralDensity, unit: "g/cm³" },
+                { label: "Tipo Moinho", value: simulationData.parameters.millType, unit: "" },
+                { label: "Diâmetro", value: simulationData.parameters.millDiameter, unit: "m" },
+                { label: "Produtividade", value: simulationData.results.productivity, unit: "ton/h" },
+                { label: "Consumo", value: simulationData.results.energy, unit: "kWh/ton" }
+            ];
+
+            const summaryContainer = document.getElementById('simulation-summary');
+            summaryContainer.innerHTML = summaryItems.map(item => `
+                <div class="summary-item">
+                    <div class="summary-label">${item.label}</div>
+                    <div class="summary-value">${item.value}</div>
+                    <div class="summary-unit">${item.unit}</div>
+                </div>
+            `).join('');
+        }
+
+        // Exportar para Excel
+        document.getElementById('export-excel').addEventListener('click', function() {
+            // Criar workbook
+            const wb = XLSX.utils.book_new();
+            
+            // Planilha de parâmetros
+            const paramData = [
+                ["Parâmetro", "Valor", "Unidade"],
+                ["Material", simulationData.parameters.material, ""],
+                ["Tamanho Alimentação", simulationData.parameters.feedSize, "mm"],
+                ["Tamanho Produto", simulationData.parameters.productSize, "mm"],
+                ["Densidade Mineral", simulationData.parameters.mineralDensity, "g/cm³"],
+                ["Tipo de Moinho", simulationData.parameters.millType, ""],
+                ["Diâmetro", simulationData.parameters.millDiameter, "m"],
+                ["Comprimento", simulationData.parameters.millLength, "m"],
+                ["Volume Útil", simulationData.parameters.millVolume, "m³"],
+                ["Velocidade", simulationData.parameters.millSpeed, "rpm"]
+            ];
+            
+            const paramWS = XLSX.utils.aoa_to_sheet(paramData);
+            XLSX.utils.book_append_sheet(wb, paramWS, "Parâmetros");
+            
+            // Planilha de resultados
+            const resultData = [
+                ["Resultado", "Valor", "Unidade"],
+                ["Produtividade", simulationData.results.productivity, "ton/h"],
+                ["Consumo Específico", simulationData.results.energy, "kWh/ton"],
+                ["Eficiência", simulationData.results.efficiency, "%"],
+                ["Tempo Residência", simulationData.results.residenceTime, "min"],
+                ["Balanço de Massa", simulationData.results.massBalance.calculated ? (simulationData.results.massBalance.balanced ? "Balanceado" : "Desbalanceado") : "Não calculado", ""],
+                ["Entrada Total", simulationData.results.massBalance.calculated ? simulationData.results.massBalance.totalInput.toFixed(2) : "N/A", "ton/h"],
+                ["Saída Total", simulationData.results.massBalance.calculated ? simulationData.results.massBalance.totalOutput.toFixed(2) : "N/A", "ton/h"],
+                ["Erro de Balanço", simulationData.results.massBalance.calculated ? simulationData.results.massBalance.balanceError.toFixed(2) + "%" : "N/A", ""]
+            ];
+            
+            const resultWS = XLSX.utils.aoa_to_sheet(resultData);
+            XLSX.utils.book_append_sheet(wb, resultWS, "Resultados");
+            
+            // Planilha de fluxos
+            const flowData = [
+                ["Nome", "Tipo", "Vazão Polpa (m³/h)", "Tamanho (mm)", "% Sólidos", "Umidade (%)", "Massa Seca (ton/h)", "Água (m³/h)", "Densidade (g/cm³)", "AI", "WI", "% Sólidos Peso"]
+            ];
+            
+            for (const streamId in simulationData.streams) {
+                const stream = simulationData.streams[streamId];
+                flowData.push([
+                    stream.name,
+                    stream.type === 'input' ? 'Entrada' : stream.type === 'output' ? 'Saída' : 'Reciclo',
+                    stream.pulpFlow,
+                    stream.size,
+                    stream.solids,
+                    stream.moisture,
+                    stream.dryMassFlow,
+                    stream.waterFlow,
+                    stream.pulpDensity,
+                    stream.aiRatio,
+                    stream.wiRatio,
+                    stream.solidsWeight
+                ]);
+            }
+            
+            const flowWS = XLSX.utils.aoa_to_sheet(flowData);
+            XLSX.utils.book_append_sheet(wb, flowWS, "Fluxos");
+            
+            // Exportar arquivo
+            XLSX.writeFile(wb, 'simulacao_moagem.xlsx');
+            
+            // Feedback visual
+            const originalText = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-check"></i> Exportado!';
+            setTimeout(() => {
+                this.innerHTML = originalText;
+            }, 2000);
+        });
+
+        // Botão de executar simulação
+        document.getElementById('run-simulation').addEventListener('click', function() {
+            // Atualizar parâmetros
+            simulationData.parameters = {
+                material: document.getElementById('material').options[document.getElementById('material').selectedIndex].text,
+                feedSize: parseFloat(document.getElementById('feed-size').value),
+                productSize: parseFloat(document.getElementById('product-size').value),
+                mineralDensity: parseFloat(document.getElementById('mineral-density').value),
+                millType: document.getElementById('mill-type').options[document.getElementById('mill-type').selectedIndex].text,
+                millDiameter: parseFloat(document.getElementById('mill-diameter').value),
+                millLength: parseFloat(document.getElementById('mill-length').value),
+                millVolume: parseFloat(document.getElementById('mill-volume').value),
+                millSpeed: parseFloat(document.getElementById('mill-speed').value),
+                ballLoad: parseFloat(document.getElementById('ball-load').value),
+                ballSize: parseFloat(document.getElementById('ball-size').value),
+                correctionFactor: parseFloat(document.getElementById('correction-factor').value)
+            };
+            
+            // Simular cálculos
+            simulateCalculations();
+            
+            // Atualizar interface
+            updateInterface();
+            
+            // Atualizar cores dos fluxos conforme status da simulação
+            updateStreamColors();
+            
+            // Feedback visual
+            const originalText = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-check"></i> Concluído!';
+            setTimeout(() => {
+                this.innerHTML = originalText;
+            }, 2000);
+        });
+
+        // Botão de balanço de massa
+        document.getElementById('balance-mass').addEventListener('click', function() {
+            const isBalanced = calculateSystemMassBalance();
+            
+            if (isBalanced) {
+                alert(`Balanço de Massa calculado com sucesso!\nEntrada: ${simulationData.results.massBalance.totalInput.toFixed(2)} ton/h\nSaída: ${simulationData.results.massBalance.totalOutput.toFixed(2)} ton/h\nErro: ${simulationData.results.massBalance.balanceError.toFixed(2)}%`);
+            } else {
+                alert(`Balanço de Massa com discrepância!\nEntrada: ${simulationData.results.massBalance.totalInput.toFixed(2)} ton/h\nSaída: ${simulationData.results.massBalance.totalOutput.toFixed(2)} ton/h\nErro: ${simulationData.results.massBalance.balanceError.toFixed(2)}%`);
+            }
+            
+            updateSummary();
+        });
+
+        // Limpar fluxograma
+        document.getElementById('clear-flowchart').addEventListener('click', function() {
+            if (confirm('Tem certeza que deseja limpar todo o fluxograma?')) {
+                nodes.forEach(node => node.destroy());
+                streams.forEach(stream => stream.destroy());
+                junctions.forEach(junction => junction.destroy());
+                connections.forEach(conn => conn.line.destroy());
+                
+                nodes = [];
+                streams = [];
+                junctions = [];
+                connections = [];
+                selectedElement = null;
+                simulationData.streams = {};
+                
+                // Recriar elementos básicos
+                initFlowchart();
+                layer.draw();
+            }
+        });
+
+        function simulateCalculations() {
             // Fatores baseados no tipo de moinho
             const millFactors = {
                 ball: { energy: 1.2, efficiency: 0.85 },
@@ -502,54 +2146,198 @@
                 sag: { energy: 1.8, efficiency: 0.78 }
             };
             
-            // Cálculos simulados
-            const sizeReduction = feedSize / productSize;
-            const energy = (sizeReduction * millFactors[millType].energy * feedRate / 10).toFixed(2);
-            const efficiency = (millFactors[millType].efficiency * 100 - (sizeReduction * 0.5)).toFixed(1);
+            // Cálculos simulados considerando parâmetros do moinho
+            const sizeReduction = simulationData.parameters.feedSize / simulationData.parameters.productSize;
+            const volumeFactor = simulationData.parameters.millVolume / 50;
+            const speedFactor = simulationData.parameters.millSpeed / 15;
+            const ballFactor = simulationData.parameters.ballLoad / 30;
             
-            // Gerar curva granulométrica
-            const particleSizes = [
-                feedSize,
-                feedSize * 0.6,
-                feedSize * 0.3,
-                feedSize * 0.1,
-                productSize * 5,
-                productSize * 2,
-                productSize
-            ];
+            // Calcular balanço de massa primeiro
+            calculateSystemMassBalance();
             
-            const passing = particleSizes.map(size => {
-                return (100 * Math.pow((1 - (size - productSize)/(feedSize - productSize)), 0.6)).toFixed(1);
-            });
+            // Usar dados do balanço para simulação
+            let totalInputMass = 0;
+            for (const streamId in simulationData.streams) {
+                const stream = simulationData.streams[streamId];
+                if (stream.type === 'input') {
+                    totalInputMass += stream.dryMassFlow;
+                }
+            }
             
-            return {
-                energy,
-                efficiency,
-                particleSizes,
-                passing
-            };
+            // Simular possibilidade de erro (10% de chance)
+            const hasError = Math.random() < 0.1;
+            
+            if (hasError) {
+                simulationData.results.simulationStatus = "error";
+                simulationData.results.energy = "N/A";
+                simulationData.results.efficiency = "N/A";
+                simulationData.results.productivity = "N/A";
+                simulationData.results.residenceTime = "N/A";
+            } else {
+                simulationData.results.simulationStatus = "success";
+                simulationData.results.energy = (sizeReduction * millFactors[document.getElementById('mill-type').value].energy * 
+                                               totalInputMass / 10 * volumeFactor * speedFactor * ballFactor * 
+                                               simulationData.parameters.correctionFactor).toFixed(2);
+                
+                simulationData.results.efficiency = (millFactors[document.getElementById('mill-type').value].efficiency * 100 * 
+                                                   (simulationData.parameters.ballSize / 80) - (sizeReduction * 0.5)).toFixed(1);
+                
+                simulationData.results.productivity = (totalInputMass * 0.95 + Math.random() * 5).toFixed(1);
+                simulationData.results.residenceTime = (sizeReduction / speedFactor * 5).toFixed(1);
+            }
         }
 
-        function updateCharts(data) {
-            // Atualizar gráfico granulométrico
-            particleChart.data.labels = data.particleSizes.map(size => size.toFixed(3));
-            particleChart.data.datasets[0].data = data.passing;
-            particleChart.update();
+        // Atualizar cores dos fluxos conforme status da simulação
+        function updateStreamColors() {
+            streams.forEach(stream => {
+                const arrow = stream.find('.stream-arrow')[0];
+                
+                // Resetar para cor padrão (azul) se não foi executado
+                if (simulationData.results.simulationStatus === "not-run") {
+                    if (arrow.fill() === '#28a745') { // Input
+                        arrow.stroke('#28a745');
+                    } else if (arrow.fill() === '#dc3545') { // Output
+                        arrow.stroke('#dc3545');
+                    } else if (arrow.fill() === '#6c757d') { // Recycle
+                        arrow.stroke('#6c757d');
+                    } else { // Junção
+                        arrow.stroke('#0077c8');
+                    }
+                } 
+                // Verde se simulação foi bem sucedida
+                else if (simulationData.results.simulationStatus === "success") {
+                    arrow.stroke('#28a745');
+                } 
+                // Vermelho se houve erro na simulação
+                else if (simulationData.results.simulationStatus === "error") {
+                    arrow.stroke('#dc3545');
+                }
+            });
             
-            // Atualizar gráfico de energia
-            energyChart.data.datasets[0].data = [
-                parseFloat(data.energy),
-                parseFloat(data.energy) * parseFloat(document.getElementById('feed-rate').value)
-            ];
-            energyChart.update();
+            // Atualizar conexões também
+            connections.forEach(conn => {
+                const line = conn.line;
+                
+                if (simulationData.results.simulationStatus === "not-run") {
+                    line.stroke('#0077c8');
+                } else if (simulationData.results.simulationStatus === "success") {
+                    line.stroke('#28a745');
+                } else if (simulationData.results.simulationStatus === "error") {
+                    line.stroke('#dc3545');
+                }
+            });
             
-            // Atualizar gráfico de eficiência
-            efficiencyChart.data.datasets[0].data = [
-                parseFloat(data.efficiency),
-                100 - parseFloat(data.efficiency)
-            ];
-            efficiencyChart.update();
+            layer.draw();
         }
+
+        function updateInterface() {
+            // Atualizar fluxograma
+            streams.forEach(stream => {
+                const streamData = simulationData.streams[stream.id()];
+                if (!streamData) return;
+                
+                const label = stream.find('.stream-label')[0];
+                label.text(`${streamData.name}\n${streamData.size} mm\n${streamData.pulpFlow} m³/h`);
+                
+                const arrow = stream.find('.stream-arrow')[0];
+                const arrowColor = streamData.type === 'input' ? '#28a745' : 
+                                 streamData.type === 'output' ? '#dc3545' : 
+                                 streamData.type === 'recycle' ? '#6c757d' : '#0077c8';
+                arrow.fill(arrowColor);
+                arrow.stroke(arrowColor);
+                
+                label.x(streamData.type === 'input' ? -90 : 110);
+                label.align(streamData.type === 'input' ? 'right' : 'left');
+            });
+            
+            nodes.forEach(node => {
+                if (node.id().startsWith('mill-')) {
+                    const text = node.find('.mill-text')[0];
+                    text.text(`MOINHO\n${simulationData.parameters.millType.toUpperCase().replace('BALL', 'DE BOLAS').replace('ROD', 'DE BARRAS').replace('SAG', 'SAG')}`);
+                }
+            });
+            
+            layer.draw();
+            
+            // Atualizar resumo
+            updateSummary();
+            
+            // Atualizar gráficos da página de simulação
+            if (simulationData.results.simulationStatus !== "error") {
+                particleChart.data.labels = simulationData.results.particleDistribution.map(item => item.size.toFixed(3));
+                particleChart.data.datasets[0].data = simulationData.results.particleDistribution.map(item => item.passing);
+                particleChart.update();
+                
+                energyChart.data.datasets[0].data = [
+                    parseFloat(simulationData.results.energy),
+                    parseFloat(simulationData.results.energy) * parseFloat(simulationData.results.productivity)
+                ];
+                energyChart.update();
+                
+                efficiencyChart.data.datasets[0].data = [
+                    parseFloat(simulationData.results.efficiency),
+                    100 - parseFloat(simulationData.results.efficiency)
+                ];
+                efficiencyChart.update();
+            }
+            
+            // Atualizar página de resultados
+            document.getElementById('result-productivity').textContent = simulationData.results.productivity;
+            document.getElementById('result-energy').textContent = simulationData.results.energy;
+            document.getElementById('result-efficiency').textContent = simulationData.results.efficiency;
+            document.getElementById('result-residence').textContent = simulationData.results.residenceTime;
+            
+            if (simulationData.results.simulationStatus !== "error") {
+                resultsParticleChart.data.labels = simulationData.results.particleDistribution.map(item => item.size.toFixed(3));
+                resultsParticleChart.data.datasets[0].data = simulationData.results.particleDistribution.map(item => item.passing);
+                resultsParticleChart.update();
+                
+                resultsEnergyChart.data.datasets[0].data = [
+                    parseFloat(simulationData.results.energy),
+                    parseFloat(simulationData.results.energy) * parseFloat(simulationData.results.productivity)
+                ];
+                resultsEnergyChart.update();
+                
+                resultsEfficiencyChart.data.datasets[0].data = [
+                    parseFloat(simulationData.results.efficiency),
+                    100 - parseFloat(simulationData.results.efficiency)
+                ];
+                resultsEfficiencyChart.update();
+            }
+        }
+
+        // Inicialização
+        window.addEventListener('resize', () => {
+            stage.width(document.querySelector('#flowchart').offsetWidth);
+            stage.height(document.querySelector('#flowchart').offsetHeight);
+            layer.draw();
+        });
+
+        // Adicionar elementos iniciais ao fluxograma
+        function initFlowchart() {
+            const mill = addMill(stage.width() / 2, stage.height() / 2);
+            const inputStream = addStream(stage.width() / 4, stage.height() / 2, 'input');
+            const outputStream = addStream(3 * stage.width() / 4, stage.height() / 2 + 50, 'output');
+            
+            // Conectar fluxos ao moinho
+            createConnection(
+                { node: inputStream, connector: inputStream.children[2], type: 'output' },
+                { node: mill, connector: mill.children[1], type: 'input' }
+            );
+            
+            createConnection(
+                { node: mill, connector: mill.children[2], type: 'output' },
+                { node: outputStream, connector: outputStream.children[2], type: 'input' }
+            );
+            
+            // Calcular balanço de massa inicial
+            calculateSystemMassBalance();
+        }
+
+        // Carregar dados iniciais
+        updateSummary();
+        initFlowchart();
+        layer.draw();
     </script>
 </body>
 </html>
