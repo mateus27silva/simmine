@@ -17,6 +17,7 @@
             --flow-blue: #0077c8;
             --flow-green: #28a745;
             --flow-red: #dc3545;
+            --flow-yellow: #ffc107;
             --selection-color: rgba(0, 163, 224, 0.3);
             --context-menu-bg: white;
         }
@@ -441,6 +442,38 @@
         .tab-content.active {
             display: block;
         }
+
+        /* Estilos aprimorados para conexões */
+        .connection-hover {
+            stroke-width: 4px !important;
+            shadow-blur: 10 !important;
+        }
+
+        .flow-label {
+            font-size: 12px;
+            font-weight: bold;
+            pointer-events: none;
+            background-color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .connector-point {
+            transition: all 0.2s ease;
+            cursor: crosshair;
+            z-index: 10;
+        }
+
+        .connector-point:hover {
+            opacity: 1 !important;
+            transform: scale(1.3);
+        }
+
+        .connection-path {
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
     </style>
 </head>
 <body>
@@ -625,25 +658,25 @@
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px;">
                         <div class="summary-item">
                             <div class="summary-label">Produtividade</div>
-                            <div class="summary-value" id="result-productivity">98.0</div>
+                            <div class="summary-value" id="result-productivity">-</div>
                             <div class="summary-unit">ton/h</div>
                         </div>
                         
                         <div class="summary-item">
                             <div class="summary-label">Consumo Específico</div>
-                            <div class="summary-value" id="result-energy">15.5</div>
+                            <div class="summary-value" id="result-energy">-</div>
                             <div class="summary-unit">kWh/ton</div>
                         </div>
                         
                         <div class="summary-item">
                             <div class="summary-label">Eficiência</div>
-                            <div class="summary-value" id="result-efficiency">85.3</div>
+                            <div class="summary-value" id="result-efficiency">-</div>
                             <div class="summary-unit">%</div>
                         </div>
                         
                         <div class="summary-item">
                             <div class="summary-label">Tempo de Residência</div>
-                            <div class="summary-value" id="result-residence">12.5</div>
+                            <div class="summary-value" id="result-residence">-</div>
                             <div class="summary-unit">minutos</div>
                         </div>
                     </div>
@@ -780,10 +813,10 @@
                 correctionFactor: 1.0
             },
             results: {
-                productivity: 98.0,
-                energy: 15.5,
-                efficiency: 85.3,
-                residenceTime: 12.5,
+                productivity: "-",
+                energy: "-",
+                efficiency: "-",
+                residenceTime: "-",
                 particleDistribution: [
                     { size: 25.0, passing: 100 },
                     { size: 10.0, passing: 85 },
@@ -916,29 +949,33 @@
 
             // Pontos de conexão
             const connectionPoints = [
-                { x: -10, y: 20, type: 'input' },
-                { x: -10, y: 60, type: 'input' },
-                { x: 130, y: 20, type: 'output' },
-                { x: 130, y: 60, type: 'output' }
+                { x: -10, y: 20, type: 'input', name: 'input-1' },
+                { x: -10, y: 60, type: 'input', name: 'input-2' },
+                { x: 130, y: 20, type: 'output', name: 'output-1' },
+                { x: 130, y: 60, type: 'output', name: 'output-2' }
             ];
 
-            connectionPoints.forEach((point, i) => {
+            connectionPoints.forEach((point) => {
                 const connector = new Konva.Circle({
                     x: point.x,
                     y: point.y,
-                    radius: 5,
+                    radius: 6,
                     fill: point.type === 'input' ? '#28a745' : '#dc3545',
                     stroke: 'white',
-                    strokeWidth: 1,
-                    opacity: 0,
-                    id: 'connector-' + i,
+                    strokeWidth: 2,
+                    opacity: 0.7,
+                    id: 'connector-' + point.name,
                     name: 'connector',
-                    connectorType: point.type
+                    connectorType: point.type,
+                    shadowColor: 'black',
+                    shadowBlur: 5,
+                    shadowOpacity: 0.3
                 });
 
                 connector.on('mouseover', function() {
                     if (selectedTool === 'connect') {
                         this.opacity(1);
+                        this.radius(8);
                         layer.draw();
                         document.body.style.cursor = 'pointer';
                     }
@@ -946,7 +983,8 @@
 
                 connector.on('mouseout', function() {
                     if (!connecting) {
-                        this.opacity(0);
+                        this.opacity(0.7);
+                        this.radius(6);
                         layer.draw();
                     }
                     document.body.style.cursor = 'default';
@@ -975,7 +1013,7 @@
                                 });
                             }
                             connecting = false;
-                            this.opacity(0);
+                            this.opacity(0.7);
                             document.body.style.cursor = 'default';
                             connectionStart = null;
                         }
@@ -1057,64 +1095,90 @@
                 name: 'stream-label'
             });
 
-            // Ponto de conexão
-            const connector = new Konva.Circle({
-                x: type === 'input' ? 100 : 0,
+            // Ponto de conexão - entrada (parte traseira)
+            const inputConnector = new Konva.Circle({
+                x: 0,
                 y: 0,
-                radius: 5,
-                fill: type === 'input' ? '#dc3545' : '#28a745',
+                radius: 6,
+                fill: '#28a745',
                 stroke: 'white',
-                strokeWidth: 1,
-                opacity: 0,
+                strokeWidth: 2,
+                opacity: 0.7,
                 name: 'connector',
-                connectorType: type === 'input' ? 'output' : 'input'
+                connectorType: 'input',
+                shadowColor: 'black',
+                shadowBlur: 5,
+                shadowOpacity: 0.3
             });
 
-            connector.on('mouseover', function() {
-                if (selectedTool === 'connect') {
-                    this.opacity(1);
-                    layer.draw();
-                    document.body.style.cursor = 'pointer';
-                }
+            // Ponto de conexão - saída (ponta da seta)
+            const outputConnector = new Konva.Circle({
+                x: 100,
+                y: 0,
+                radius: 6,
+                fill: '#dc3545',
+                stroke: 'white',
+                strokeWidth: 2,
+                opacity: 0.7,
+                name: 'connector',
+                connectorType: 'output',
+                shadowColor: 'black',
+                shadowBlur: 5,
+                shadowOpacity: 0.3
             });
 
-            connector.on('mouseout', function() {
-                if (!connecting) {
-                    this.opacity(0);
-                    layer.draw();
-                }
-                document.body.style.cursor = 'default';
-            });
-
-            connector.on('click', function(e) {
-                e.cancelBubble = true;
-                if (selectedTool === 'connect') {
-                    if (!connecting) {
-                        connectionStart = {
-                            node: streamGroup,
-                            connector: this,
-                            type: this.attrs.connectorType
-                        };
-                        connecting = true;
+            // Configurar interações para os conectores
+            [inputConnector, outputConnector].forEach(connector => {
+                connector.on('mouseover', function() {
+                    if (selectedTool === 'connect') {
                         this.opacity(1);
-                        document.body.style.cursor = 'crosshair';
-                    } else {
-                        // Finalizar conexão
-                        if (connectionStart.type !== this.attrs.connectorType && 
-                            connectionStart.node.id() !== streamGroup.id()) {
-                            createConnection(connectionStart, {
+                        this.radius(8);
+                        layer.draw();
+                        document.body.style.cursor = 'pointer';
+                    }
+                });
+
+                connector.on('mouseout', function() {
+                    if (!connecting) {
+                        this.opacity(0.7);
+                        this.radius(6);
+                        layer.draw();
+                    }
+                    document.body.style.cursor = 'default';
+                });
+
+                connector.on('click', function(e) {
+                    e.cancelBubble = true;
+                    if (selectedTool === 'connect') {
+                        if (!connecting) {
+                            connectionStart = {
                                 node: streamGroup,
                                 connector: this,
                                 type: this.attrs.connectorType
-                            });
+                            };
+                            connecting = true;
+                            this.opacity(1);
+                            document.body.style.cursor = 'crosshair';
+                        } else {
+                            // Finalizar conexão
+                            if (connectionStart.type !== this.attrs.connectorType && 
+                                connectionStart.node.id() !== streamGroup.id()) {
+                                createConnection(connectionStart, {
+                                    node: streamGroup,
+                                    connector: this,
+                                    type: this.attrs.connectorType
+                                });
+                            }
+                            connecting = false;
+                            this.opacity(0.7);
+                            document.body.style.cursor = 'default';
+                            connectionStart = null;
                         }
-                        connecting = false;
-                        this.opacity(0);
-                        document.body.style.cursor = 'default';
-                        connectionStart = null;
+                        layer.draw();
                     }
-                    layer.draw();
-                }
+                });
+
+                streamGroup.add(connector);
             });
 
             streamGroup.on('dragstart', function() {
@@ -1143,7 +1207,6 @@
 
             streamGroup.add(arrow);
             streamGroup.add(label);
-            streamGroup.add(connector);
             layer.add(streamGroup);
             streams.push(streamGroup);
 
@@ -1210,19 +1273,23 @@
                 const connector = new Konva.Circle({
                     x: point.x,
                     y: point.y,
-                    radius: 5,
+                    radius: 6,
                     fill: point.type === 'input' ? '#28a745' : '#dc3545',
                     stroke: 'white',
-                    strokeWidth: 1,
-                    opacity: 0,
+                    strokeWidth: 2,
+                    opacity: 0.7,
                     id: 'connector-' + i,
                     name: 'connector',
-                    connectorType: point.type
+                    connectorType: point.type,
+                    shadowColor: 'black',
+                    shadowBlur: 5,
+                    shadowOpacity: 0.3
                 });
 
                 connector.on('mouseover', function() {
                     if (selectedTool === 'connect') {
                         this.opacity(1);
+                        this.radius(8);
                         layer.draw();
                         document.body.style.cursor = 'pointer';
                     }
@@ -1230,7 +1297,8 @@
 
                 connector.on('mouseout', function() {
                     if (!connecting) {
-                        this.opacity(0);
+                        this.opacity(0.7);
+                        this.radius(6);
                         layer.draw();
                     }
                     document.body.style.cursor = 'default';
@@ -1259,7 +1327,7 @@
                                 });
                             }
                             connecting = false;
-                            this.opacity(0);
+                            this.opacity(0.7);
                             document.body.style.cursor = 'default';
                             connectionStart = null;
                         }
@@ -1302,37 +1370,116 @@
             return junctionGroup;
         }
 
-        // Criar conexão entre elementos
+        // Criar conexão entre elementos (versão totalmente aprimorada)
         function createConnection(start, end) {
             // Verificar se já existe uma conexão entre esses pontos
             const existingConnection = connections.find(conn => {
                 return (conn.start.node.id() === start.node.id() && 
-                        conn.end.node.id() === end.node.id()) ||
-                       (conn.start.node.id() === end.node.id() && 
-                        conn.end.node.id() === start.node.id());
+                        conn.start.connector.id() === start.connector.id() &&
+                        conn.end.node.id() === end.node.id() && 
+                        conn.end.connector.id() === end.connector.id()) ||
+                    (conn.start.node.id() === end.node.id() && 
+                        conn.start.connector.id() === end.connector.id() &&
+                        conn.end.node.id() === start.node.id() && 
+                        conn.end.connector.id() === start.connector.id());
             });
 
             if (existingConnection) {
-                return; // Não criar conexão duplicada
+                return;
             }
 
+            // Verifica se está conectando entrada com saída
+            if (start.type === end.type) {
+                alert("Conexão inválida: você deve conectar uma saída (vermelho) com uma entrada (verde)!");
+                return;
+            }
+
+            // Determina origem (saída) e destino (entrada)
+            const origin = start.type === 'output' ? start : end;
+            const destination = start.type === 'input' ? start : end;
+
+            // Criar linha de conexão com estilo profissional
             const line = new Konva.Arrow({
                 points: [
-                    start.node.x() + start.connector.x(),
-                    start.node.y() + start.connector.y(),
-                    end.node.x() + end.connector.x(),
-                    end.node.y() + end.connector.y()
+                    origin.node.x() + origin.connector.x(),
+                    origin.node.y() + origin.connector.y(),
+                    destination.node.x() + destination.connector.x(),
+                    destination.node.y() + destination.connector.y()
                 ],
-                pointerLength: 10,
-                pointerWidth: 10,
-                fill: '#0077c8',
-                stroke: '#0077c8',
-                strokeWidth: 2,
+                pointerLength: 12,
+                pointerWidth: 12,
+                fill: '#005b96',
+                stroke: '#005b96',
+                strokeWidth: 3,
+                shadowColor: 'rgba(0,0,0,0.3)',
+                shadowBlur: 5,
+                shadowOffset: { x: 2, y: 2 },
+                shadowOpacity: 0.5,
                 id: 'connection-' + Date.now(),
-                name: 'connection-line'
+                name: 'connection-line',
+                lineCap: 'round',
+                lineJoin: 'round'
             });
 
-            // Tornar a conexão clicável
+            // Adicionar efeito de gradiente para conexões importantes
+            if (start.node.type === 'mill' || end.node.type === 'mill') {
+                line.fillLinearGradientStartPoint = { x: 0, y: 0 };
+                line.fillLinearGradientEndPoint = { x: 150, y: 0 };
+                line.fillLinearGradientColorStops = [0, '#00a3e0', 1, '#005b96'];
+                line.strokeLinearGradientStartPoint = { x: 0, y: 0 };
+                line.strokeLinearGradientEndPoint = { x: 150, y: 0 };
+                line.strokeLinearGradientColorStops = [0, '#00a3e0', 1, '#005b96'];
+            }
+
+            // Calcular ponto médio para posicionar o rótulo
+            const midX = (start.node.x() + start.connector.x() + end.node.x() + end.connector.x()) / 2;
+            const midY = (start.node.y() + start.connector.y() + end.node.y() + end.connector.y()) / 2;
+            
+            // Criar rótulo de fluxo com fundo e sombra
+            const flowLabel = new Konva.Label({
+                x: midX - 30,
+                y: midY - 10,
+                opacity: 0.9
+            });
+
+            flowLabel.add(new Konva.Tag({
+                fill: 'white',
+                stroke: '#005b96',
+                strokeWidth: 1,
+                cornerRadius: 5,
+                shadowColor: 'rgba(0,0,0,0.2)',
+                shadowBlur: 5,
+                shadowOffset: { x: 1, y: 1 }
+            }));
+
+            // Obter dados do fluxo se for uma conexão de saída de fluxo
+            let flowText = '→';
+            if (origin.node.type === 'stream' && simulationData.streams[origin.node.id()]) {
+                flowText = `→ ${simulationData.streams[origin.node.id()].pulpFlow} m³/h`;
+            }
+
+            flowLabel.add(new Konva.Text({
+                text: flowText,
+                fontSize: 12,
+                fontFamily: 'Arial',
+                fill: '#005b96',
+                padding: 5
+            }));
+
+            // Tornar a conexão interativa
+            line.on('mouseover', function() {
+                this.strokeWidth(4);
+                this.shadowBlur(10);
+                flowLabel.moveToTop();
+                layer.draw();
+            });
+
+            line.on('mouseout', function() {
+                this.strokeWidth(3);
+                this.shadowBlur(5);
+                layer.draw();
+            });
+
             line.on('click', function(e) {
                 if (selectedTool === 'select') {
                     selectElement(this);
@@ -1347,26 +1494,44 @@
                 e.cancelBubble = true;
             });
 
+            // Adicionar à lista de conexões
             connections.push({
                 line: line,
                 start: start,
-                end: end
+                end: end,
+                label: flowLabel
             });
 
+            // Adicionar ao layer
             layer.add(line);
+            layer.add(flowLabel);
             layer.draw();
         }
 
         // Atualizar conexões quando os elementos são movidos
         function updateConnections() {
             connections.forEach(conn => {
-                const { line, start, end } = conn;
-                line.points([
-                    start.node.x() + start.connector.x(),
-                    start.node.y() + start.connector.y(),
-                    end.node.x() + end.connector.x(),
-                    end.node.y() + end.connector.y()
-                ]);
+                const { line, start, end, label } = conn;
+                
+                // Atualizar pontos da linha
+                const startX = start.node.x() + start.connector.x();
+                const startY = start.node.y() + start.connector.y();
+                const endX = end.node.x() + end.connector.x();
+                const endY = end.node.y() + end.connector.y();
+                
+                line.points([startX, startY, endX, endY]);
+                
+                // Atualizar posição do rótulo
+                const midX = (startX + endX) / 2;
+                const midY = (startY + endY) / 2;
+                
+                label.x(midX - 30);
+                label.y(midY - 10);
+                
+                // Atualizar texto do rótulo se for um fluxo
+                if (start.node.type === 'stream' && simulationData.streams[start.node.id()]) {
+                    label.getText().text(`→ ${simulationData.streams[start.node.id()].pulpFlow} m³/h`);
+                }
             });
             layer.draw();
         }
@@ -1391,7 +1556,8 @@
                 element.find('.junction-body')[0].strokeWidth(3);
             } else if (element.name === 'connection-line') {
                 element.stroke('#00a3e0');
-                element.strokeWidth(3);
+                element.strokeWidth(4);
+                element.shadowBlur(10);
             }
             
             layer.draw();
@@ -1412,7 +1578,11 @@
             streams.forEach(stream => {
                 const arrow = stream.find('.stream-arrow')[0];
                 if (arrow) {
-                    arrow.stroke(arrow.fill());
+                    const streamData = simulationData.streams[stream.id()];
+                    const arrowColor = streamData.type === 'input' ? '#28a745' : 
+                                     streamData.type === 'output' ? '#dc3545' : 
+                                     streamData.type === 'recycle' ? '#6c757d' : '#0077c8';
+                    arrow.stroke(arrowColor);
                     arrow.strokeWidth(3);
                 }
             });
@@ -1428,8 +1598,9 @@
             
             // Desselecionar conexões
             connections.forEach(conn => {
-                conn.line.stroke('#0077c8');
-                conn.line.strokeWidth(2);
+                conn.line.stroke('#005b96');
+                conn.line.strokeWidth(3);
+                conn.line.shadowBlur(5);
             });
             
             selectedElement = null;
@@ -1479,6 +1650,7 @@
                 connections = connections.filter(conn => {
                     if (conn.start.node.id() === millId || conn.end.node.id() === millId) {
                         conn.line.destroy();
+                        conn.label.destroy();
                         return false;
                     }
                     return true;
@@ -1493,6 +1665,7 @@
                 connections = connections.filter(conn => {
                     if (conn.start.node.id() === streamId || conn.end.node.id() === streamId) {
                         conn.line.destroy();
+                        conn.label.destroy();
                         return false;
                     }
                     return true;
@@ -1508,6 +1681,7 @@
                 connections = connections.filter(conn => {
                     if (conn.start.node.id() === junctionId || conn.end.node.id() === junctionId) {
                         conn.line.destroy();
+                        conn.label.destroy();
                         return false;
                     }
                     return true;
@@ -1517,8 +1691,12 @@
                 junctions = junctions.filter(junction => junction.id() !== junctionId);
             }
             else if (selectedElement.name === 'connection-line') {
-                // Remover apenas a conexão
+                // Remover a conexão e seu rótulo
                 const connectionId = selectedElement.id();
+                const connection = connections.find(c => c.line.id() === connectionId);
+                if (connection) {
+                    connection.label.destroy();
+                }
                 connections = connections.filter(conn => conn.line.id() !== connectionId);
                 selectedElement.destroy();
             }
@@ -1619,6 +1797,9 @@
                 } else if (name.toLowerCase().includes('produto')) {
                     simulationData.parameters.productSize = size;
                 }
+                
+                // Atualizar rótulos das conexões
+                updateConnections();
                 
                 modal.style.display = 'none';
                 layer.draw();
@@ -1802,7 +1983,8 @@
                         element.find('.junction-body')[0].strokeWidth(3);
                     } else if (element.name === 'connection-line') {
                         element.stroke('#00a3e0');
-                        element.strokeWidth(3);
+                        element.strokeWidth(4);
+                        element.shadowBlur(10);
                     }
                 });
                 
@@ -1862,7 +2044,7 @@
             labels: ['Específico (kWh/t)', 'Total (kWh)'],
             datasets: [{
                 label: 'Consumo Energético',
-                data: [simulationData.results.energy, simulationData.results.energy * simulationData.parameters.feedRate],
+                data: [0, 0],
                 backgroundColor: [
                     '#00a3e0',
                     '#005b96'
@@ -1891,7 +2073,7 @@
         const efficiencyChart = initChart('efficiency-chart', 'doughnut', {
             labels: ['Eficiência', 'Perdas'],
             datasets: [{
-                data: [simulationData.results.efficiency, 100 - simulationData.results.efficiency],
+                data: [0, 100],
                 backgroundColor: [
                     '#005b96',
                     '#dc3545'
@@ -1934,7 +2116,7 @@
             labels: ['Específico', 'Total'],
             datasets: [{
                 label: 'Consumo Energético',
-                data: [simulationData.results.energy, simulationData.results.energy * simulationData.parameters.feedRate],
+                data: [0, 0],
                 backgroundColor: [
                     '#00a3e0',
                     '#005b96'
@@ -1953,7 +2135,7 @@
         const resultsEfficiencyChart = initChart('results-efficiency-chart', 'doughnut', {
             labels: ['Eficiência', 'Perdas'],
             datasets: [{
-                data: [simulationData.results.efficiency, 100 - simulationData.results.efficiency],
+                data: [0, 100],
                 backgroundColor: [
                     '#005b96',
                     '#dc3545'
@@ -2123,7 +2305,10 @@
                 nodes.forEach(node => node.destroy());
                 streams.forEach(stream => stream.destroy());
                 junctions.forEach(junction => junction.destroy());
-                connections.forEach(conn => conn.line.destroy());
+                connections.forEach(conn => {
+                    conn.line.destroy();
+                    conn.label.destroy();
+                });
                 
                 nodes = [];
                 streams = [];
@@ -2132,8 +2317,6 @@
                 selectedElement = null;
                 simulationData.streams = {};
                 
-                // Recriar elementos básicos
-                initFlowchart();
                 layer.draw();
             }
         });
@@ -2313,30 +2496,8 @@
             layer.draw();
         });
 
-        // Adicionar elementos iniciais ao fluxograma
-        function initFlowchart() {
-            const mill = addMill(stage.width() / 2, stage.height() / 2);
-            const inputStream = addStream(stage.width() / 4, stage.height() / 2, 'input');
-            const outputStream = addStream(3 * stage.width() / 4, stage.height() / 2 + 50, 'output');
-            
-            // Conectar fluxos ao moinho
-            createConnection(
-                { node: inputStream, connector: inputStream.children[2], type: 'output' },
-                { node: mill, connector: mill.children[1], type: 'input' }
-            );
-            
-            createConnection(
-                { node: mill, connector: mill.children[2], type: 'output' },
-                { node: outputStream, connector: outputStream.children[2], type: 'input' }
-            );
-            
-            // Calcular balanço de massa inicial
-            calculateSystemMassBalance();
-        }
-
         // Carregar dados iniciais
         updateSummary();
-        initFlowchart();
         layer.draw();
     </script>
 </body>
